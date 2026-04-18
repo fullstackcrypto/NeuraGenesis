@@ -1,0 +1,23 @@
+{
+  "name": "neuragenesis",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "expo start",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "verify": "npm run build && node tests/verify.mjs"
+  },
+  "dependencies": {
+    "expo": "~51.0.28",
+    "expo-router": "~3.5.23",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "@supabase/supabase-js": "2.49.8",
+    "@react-native-async-storage/async-storage": "1.23.1"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}
