@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
-import { useAuth } from '../providers/AuthProvider.js';
+import { useAuth } from '../providers/AuthProvider';
 
 export default function IndexRoute() {
   const router = useRouter();
