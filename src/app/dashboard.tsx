@@ -14,7 +14,7 @@ function Card(props: { title: string; value: string; detail: string }) {
   );
 }
 
-function NavButton(props: { href: '/approvals' | '/learning' | '/milestones'; label: string }) {
+function NavButton(props: { href: '/approvals' | '/learning' | '/milestones' | '/milestone-request'; label: string }) {
   return (
     <Link asChild href={props.href}>
       <Pressable style={{ backgroundColor: '#e2e8f0', borderRadius: 12, marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12 }}>
@@ -48,6 +48,7 @@ export default function DashboardRoute() {
         <Card title="Latest welfare log" value={summary.welfareStatus} detail={formatDate(summary.latestWelfareAt)} />
         <Card title="Latest milestone evaluation" value={summary.latestMilestoneOutcome} detail={`${summary.latestMilestoneTarget} · ${formatDate(summary.latestMilestoneAt)}`} />
 
+        <NavButton href="/milestone-request" label="Create milestone request" />
         <NavButton href="/approvals" label="Open approvals" />
         <NavButton href="/milestones" label="Open milestone evaluations" />
         <NavButton href="/learning" label="Open learning activity" />
