@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { supabase } from '../lib/supabase/supabaseClient.js';
 import { useAuth } from '../providers/AuthProvider.js';
@@ -9,6 +9,7 @@ interface ApprovalItem {
   target_ref: string;
   status: string;
   rationale: string | null;
+  requested_payload: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -18,66 +19,118 @@ function formatDate(value: string) {
 
 export default function ApprovalsRoute() {
   const { user } = useAuth();
+  const [instanceId, setInstanceId] = useState<string | null>(null);
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [statusText, setStatusText] = useState('Loading approvals...');
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadItems() {
-      if (!user) {
-        if (active) setStatusText('Sign in to view approvals.');
-        return;
-      }
-
-      const membership = await supabase.from('parent_memberships').select('instance_id').eq('user_id', user.id).limit(1).maybeSingle();
-      const instanceId = membership.data?.instance_id;
-
-      if (!instanceId) {
-        if (active) setStatusText('No NeuraGenesis instance found.');
-        return;
-      }
-
-      const approvals = await supabase
-        .from('parent_approvals')
-        .select('id, approval_type, target_ref, status, rationale, created_at')
-        .eq('instance_id', instanceId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (!active) return;
-
-      if (approvals.error) {
-        setStatusText(approvals.error.message);
-        return;
-      }
-
-      setItems(approvals.data ?? []);
-      setStatusText((approvals.data ?? []).length === 0 ? 'No approvals found yet.' : '');
+  const loadItems = useCallback(async () => {
+    if (!user) {
+      setStatusText('Sign in to view approvals.');
+      return;
     }
 
-    loadItems();
+    const membership = await supabase
+      .from('parent_memberships')
+      .select('instance_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+
+    const nextInstanceId = membership.data?.instance_id ?? null;
+    setInstanceId(nextInstanceId);
+
+    if (!nextInstanceId) {
+      setStatusText('No NeuraGenesis instance found.');
+      return;
+    }
+
+    const approvals = await supabase
+      .from('parent_approvals')
+      .select('id, approval_type, target_ref, status, rationale, requested_payload, created_at')
+      .eq('instance_id', nextInstanceId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (approvals.error) {
+      setStatusText(approvals.error.message);
+      return;
+    }
+
+    setItems(approvals.data ?? []);
+    setStatusText((approvals.data ?? []).length === 0 ? 'No approvals found yet.' : '');
+  }, [user]);
+
+  useEffect(() => {
+    void loadItems();
+  }, [loadItems]);
+
+  useEffect(() => {
+    if (!instanceId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`approvals-${instanceId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'parent_approvals', filter: `instance_id=eq.${instanceId}` },
+        () => void loadItems(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'milestone_evaluations', filter: `instance_id=eq.${instanceId}` },
+        () => void loadItems(),
+      )
+      .subscribe();
+
     return () => {
-      active = false;
+      void supabase.removeChannel(channel);
     };
-  }, [user, busyId]);
+  }, [instanceId, loadItems]);
 
   async function updateApprovalStatus(item: ApprovalItem, nextStatus: 'approved' | 'rejected') {
+    if (!user) {
+      return;
+    }
+
     setBusyId(item.id);
     setStatusText('Saving approval decision...');
 
-    const result = await supabase
-      .from('parent_approvals')
-      .update({
-        status: nextStatus,
-        rationale: nextStatus === 'approved' ? 'Approved from parent console.' : 'Rejected from parent console.',
-      })
-      .eq('id', item.id)
-      .eq('status', 'pending');
+    const previousItems = items;
+    setItems((current) =>
+      current.map((entry) =>
+        entry.id === item.id
+          ? {
+              ...entry,
+              status: nextStatus,
+              rationale:
+                nextStatus === 'approved'
+                  ? 'Approved from parent console.'
+                  : 'Rejected from parent console.',
+            }
+          : entry,
+      ),
+    );
+
+    const result = await supabase.functions.invoke('approval-decision', {
+      body: {
+        approvalId: item.id,
+        decision: nextStatus,
+        actorUserId: user.id,
+      },
+    });
 
     setBusyId(null);
-    setStatusText(result.error?.message ?? '');
+
+    if (result.error) {
+      setItems(previousItems);
+      setStatusText(result.error.message);
+      return;
+    }
+
+    setStatusText('');
+    await loadItems();
   }
 
   return (
@@ -100,10 +153,10 @@ export default function ApprovalsRoute() {
 
             {item.status === 'pending' ? (
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <Pressable disabled={busyId === item.id} onPress={() => updateApprovalStatus(item, 'approved')} style={{ backgroundColor: '#111827', borderRadius: 12, flex: 1, paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Pressable disabled={busyId === item.id} onPress={() => void updateApprovalStatus(item, 'approved')} style={{ backgroundColor: '#111827', borderRadius: 12, flex: 1, paddingHorizontal: 16, paddingVertical: 12 }}>
                   <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '600', textAlign: 'center' }}>Approve</Text>
                 </Pressable>
-                <Pressable disabled={busyId === item.id} onPress={() => updateApprovalStatus(item, 'rejected')} style={{ backgroundColor: '#e2e8f0', borderRadius: 12, flex: 1, paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Pressable disabled={busyId === item.id} onPress={() => void updateApprovalStatus(item, 'rejected')} style={{ backgroundColor: '#e2e8f0', borderRadius: 12, flex: 1, paddingHorizontal: 16, paddingVertical: 12 }}>
                   <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '600', textAlign: 'center' }}>Reject</Text>
                 </Pressable>
               </View>
