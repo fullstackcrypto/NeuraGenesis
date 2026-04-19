@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link } from 'expo-router';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
-import { useParentConsoleData } from '../hooks/useParentConsoleData.js';
-import { useAuth } from '../providers/AuthProvider.js';
+import { useParentConsoleData } from '../hooks/useParentConsoleData';
+import { useAuth } from '../providers/AuthProvider';
 
 function Card(props: { title: string; value: string; detail: string }) {
   return (
