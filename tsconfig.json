@@ -17,5 +17,12 @@
     "jsx": "react-jsx",
     "types": ["react"]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/app/**/*",
+    "src/hooks/useParentConsoleData.ts",
+    "src/lib/supabase/**/*",
+    "src/providers/**/*",
+    "src/types/**/*",
+    "src/constants/**/*"
+  ]
 }
