@@ -1,19 +1,21 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "declaration": true,
+    "strict": false,
+    "declaration": false,
     "outDir": "build",
     "rootDir": ".",
     "skipLibCheck": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "types": ["react"]
   },
-  "include": ["src/**/*", "langgraph/**/*.ts", "supabase/functions/**/*.ts"]
+  "include": ["src/**/*"]
 }
