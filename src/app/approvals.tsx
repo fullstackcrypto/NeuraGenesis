@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'expo-router';
-import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { supabase } from '../lib/supabase/supabaseClient.js';
 import { useAuth } from '../providers/AuthProvider.js';
 
@@ -24,6 +24,8 @@ export default function ApprovalsRoute() {
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [statusText, setStatusText] = useState('Loading approvals...');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [searchValue, setSearchValue] = useState('');
 
   const loadItems = useCallback(async () => {
     if (!user) {
@@ -45,7 +47,7 @@ export default function ApprovalsRoute() {
       .select('id, approval_type, target_ref, status, rationale, requested_payload, created_at')
       .eq('instance_id', nextInstanceId)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (approvals.error) {
       setStatusText(approvals.error.message);
@@ -99,6 +101,16 @@ export default function ApprovalsRoute() {
     await loadItems();
   }
 
+  const filteredItems = useMemo(() => {
+    const query = searchValue.trim().toLowerCase();
+    return items.filter((item) => {
+      const matchesStatus = statusFilter === 'all' ? true : item.status === statusFilter;
+      const haystack = `${item.approval_type} ${item.target_ref} ${item.rationale ?? ''}`.toLowerCase();
+      const matchesSearch = query.length === 0 ? true : haystack.includes(query);
+      return matchesStatus && matchesSearch;
+    });
+  }, [items, searchValue, statusFilter]);
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
@@ -111,9 +123,19 @@ export default function ApprovalsRoute() {
           </Pressable>
         </Link>
 
+        <TextInput value={searchValue} onChangeText={setSearchValue} placeholder="Search approvals" style={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: 12, borderWidth: 1, marginBottom: 12, padding: 14 }} />
+
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          {(['all', 'pending', 'approved', 'rejected'] as const).map((option) => (
+            <Pressable key={option} onPress={() => setStatusFilter(option)} style={{ backgroundColor: statusFilter === option ? '#111827' : '#e2e8f0', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 }}>
+              <Text style={{ color: statusFilter === option ? '#ffffff' : '#0f172a', fontSize: 14, fontWeight: '600' }}>{option}</Text>
+            </Pressable>
+          ))}
+        </View>
+
         {statusText ? <Text style={{ color: '#334155', marginBottom: 16 }}>{statusText}</Text> : null}
 
-        {items.map((item) => (
+        {filteredItems.map((item) => (
           <View key={item.id} style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: 16, borderWidth: 1, marginBottom: 12, padding: 16 }}>
             <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '600', marginBottom: 4 }}>{item.approval_type}</Text>
             <Text style={{ color: '#475569', fontSize: 14, marginBottom: 4 }}>Target: {item.target_ref}</Text>

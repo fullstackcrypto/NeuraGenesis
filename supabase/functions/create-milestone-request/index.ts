@@ -9,6 +9,13 @@ interface MilestoneRequestBody {
   rationale?: string;
 }
 
+const STAGE_ORDER: Record<string, number> = {
+  newborn: 10,
+  curious: 20,
+  apprentice: 30,
+  savant_candidate: 40,
+};
+
 export async function createMilestoneRequestHandler(request: Request): Promise<Response> {
   const optionsResponse = handleOptions(request);
   if (optionsResponse) return optionsResponse;
@@ -18,6 +25,20 @@ export async function createMilestoneRequestHandler(request: Request): Promise<R
   const url = Deno.env.get('SUPABASE_URL') ?? '';
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const client = createClient(url, key);
+
+  if (!Number.isFinite(body.readinessScore) || body.readinessScore < 0 || body.readinessScore > 100) {
+    return jsonResponse({ error: 'Readiness score must be between 0 and 100.' }, 400);
+  }
+
+  const fromOrder = STAGE_ORDER[body.fromStageKey];
+  const proposedOrder = STAGE_ORDER[body.proposedStageKey];
+  if (!fromOrder || !proposedOrder) {
+    return jsonResponse({ error: 'Unknown stage key in milestone request.' }, 400);
+  }
+
+  if (proposedOrder !== fromOrder + 10) {
+    return jsonResponse({ error: 'Milestone requests must advance exactly one stage at a time.' }, 400);
+  }
 
   const membership = await client
     .from('parent_memberships')
@@ -29,6 +50,34 @@ export async function createMilestoneRequestHandler(request: Request): Promise<R
   const instanceId = membership.data?.instance_id ?? null;
   if (!instanceId) {
     return jsonResponse({ error: 'No NeuraGenesis instance found for this actor.' }, 404);
+  }
+
+  const instance = await client
+    .from('neura_instances')
+    .select('current_stage_key')
+    .eq('id', instanceId)
+    .single();
+
+  if (instance.error || !instance.data) {
+    return jsonResponse({ error: instance.error?.message ?? 'Unable to load current instance stage.' }, 400);
+  }
+
+  if (instance.data.current_stage_key !== body.fromStageKey) {
+    return jsonResponse({ error: 'The requested from-stage does not match the current instance stage.' }, 409);
+  }
+
+  const existingPending = await client
+    .from('parent_approvals')
+    .select('id')
+    .eq('instance_id', instanceId)
+    .eq('approval_type', 'milestone')
+    .eq('status', 'pending')
+    .eq('target_ref', body.proposedStageKey)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingPending.data?.id) {
+    return jsonResponse({ error: 'A pending milestone request already exists for this target stage.' }, 409);
   }
 
   const milestoneInsert = await client
