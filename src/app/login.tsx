@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, SafeAreaView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '../providers/AuthProvider.js';
+import { useAuth } from '../providers/AuthProvider';
 
 function buildButtonStyle(isPrimary: boolean) {
   return {
