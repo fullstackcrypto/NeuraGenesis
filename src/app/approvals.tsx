@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'expo-router';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { supabase } from '../lib/supabase/supabaseClient.js';
 import { useAuth } from '../providers/AuthProvider.js';
@@ -30,13 +31,7 @@ export default function ApprovalsRoute() {
       return;
     }
 
-    const membership = await supabase
-      .from('parent_memberships')
-      .select('instance_id')
-      .eq('user_id', user.id)
-      .limit(1)
-      .maybeSingle();
-
+    const membership = await supabase.from('parent_memberships').select('instance_id').eq('user_id', user.id).limit(1).maybeSingle();
     const nextInstanceId = membership.data?.instance_id ?? null;
     setInstanceId(nextInstanceId);
 
@@ -66,22 +61,12 @@ export default function ApprovalsRoute() {
   }, [loadItems]);
 
   useEffect(() => {
-    if (!instanceId) {
-      return;
-    }
+    if (!instanceId) return;
 
     const channel = supabase
       .channel(`approvals-${instanceId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'parent_approvals', filter: `instance_id=eq.${instanceId}` },
-        () => void loadItems(),
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'milestone_evaluations', filter: `instance_id=eq.${instanceId}` },
-        () => void loadItems(),
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parent_approvals', filter: `instance_id=eq.${instanceId}` }, () => void loadItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'milestone_evaluations', filter: `instance_id=eq.${instanceId}` }, () => void loadItems())
       .subscribe();
 
     return () => {
@@ -90,35 +75,16 @@ export default function ApprovalsRoute() {
   }, [instanceId, loadItems]);
 
   async function updateApprovalStatus(item: ApprovalItem, nextStatus: 'approved' | 'rejected') {
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
     setBusyId(item.id);
     setStatusText('Saving approval decision...');
 
     const previousItems = items;
-    setItems((current) =>
-      current.map((entry) =>
-        entry.id === item.id
-          ? {
-              ...entry,
-              status: nextStatus,
-              rationale:
-                nextStatus === 'approved'
-                  ? 'Approved from parent console.'
-                  : 'Rejected from parent console.',
-            }
-          : entry,
-      ),
-    );
+    setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: nextStatus, rationale: nextStatus === 'approved' ? 'Approved from parent console.' : 'Rejected from parent console.' } : entry));
 
     const result = await supabase.functions.invoke('approval-decision', {
-      body: {
-        approvalId: item.id,
-        decision: nextStatus,
-        actorUserId: user.id,
-      },
+      body: { approvalId: item.id, decision: nextStatus, actorUserId: user.id },
     });
 
     setBusyId(null);
@@ -137,9 +103,13 @@ export default function ApprovalsRoute() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <Text style={{ color: '#0f172a', fontSize: 28, fontWeight: '700', marginBottom: 6 }}>Approvals</Text>
-        <Text style={{ color: '#475569', fontSize: 15, marginBottom: 18 }}>
-          Review pending and historical approval requests for milestone and permission changes.
-        </Text>
+        <Text style={{ color: '#475569', fontSize: 15, marginBottom: 18 }}>Review pending and historical approval requests.</Text>
+
+        <Link asChild href="/milestone-request">
+          <Pressable style={{ backgroundColor: '#e2e8f0', borderRadius: 12, marginBottom: 16, paddingHorizontal: 16, paddingVertical: 12 }}>
+            <Text style={{ color: '#0f172a', fontSize: 16, fontWeight: '600', textAlign: 'center' }}>Create milestone request</Text>
+          </Pressable>
+        </Link>
 
         {statusText ? <Text style={{ color: '#334155', marginBottom: 16 }}>{statusText}</Text> : null}
 
@@ -150,6 +120,12 @@ export default function ApprovalsRoute() {
             <Text style={{ color: '#475569', fontSize: 14, marginBottom: 4 }}>Status: {item.status}</Text>
             <Text style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>Requested: {formatDate(item.created_at)}</Text>
             {item.rationale ? <Text style={{ color: '#334155', fontSize: 14, marginBottom: 8 }}>{item.rationale}</Text> : null}
+
+            <Link asChild href={`/approvals/${item.id}`}>
+              <Pressable style={{ backgroundColor: '#e2e8f0', borderRadius: 12, marginBottom: item.status === 'pending' ? 10 : 0, paddingHorizontal: 16, paddingVertical: 12 }}>
+                <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '600', textAlign: 'center' }}>Open detail</Text>
+              </Pressable>
+            </Link>
 
             {item.status === 'pending' ? (
               <View style={{ flexDirection: 'row', gap: 10 }}>
