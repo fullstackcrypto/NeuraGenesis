@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase/supabaseClient.js';
 import { useAuth } from '../providers/AuthProvider.js';
 
@@ -30,54 +30,108 @@ export function useParentConsoleData() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadData() {
-      if (!user) {
-        if (active) setIsLoading(false);
-        return;
-      }
-
-      const membership = await supabase.from('parent_memberships').select('instance_id').eq('user_id', user.id).limit(1).maybeSingle();
-      if (membership.error || !membership.data?.instance_id) {
-        if (active) {
-          setErrorMessage(membership.error?.message ?? null);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      const instanceId = membership.data.instance_id;
-      const [instance, approvals, welfare, milestones] = await Promise.all([
-        supabase.from('neura_instances').select('display_name,current_stage_key').eq('id', instanceId).single(),
-        supabase.from('parent_approvals').select('id', { count: 'exact', head: true }).eq('instance_id', instanceId).eq('status', 'pending'),
-        supabase.from('welfare_logs').select('status,created_at').eq('instance_id', instanceId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('milestone_evaluations').select('outcome,proposed_stage_key,created_at').eq('instance_id', instanceId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      ]);
-
-      if (active) {
-        setSummary({
-          instanceId,
-          instanceName: instance.data?.display_name ?? 'NeuraGenesis',
-          currentStageLabel: formatStageLabel(instance.data?.current_stage_key),
-          welfareStatus: welfare.data?.status ?? 'No logs yet',
-          pendingApprovals: approvals.count ?? 0,
-          latestWelfareAt: welfare.data?.created_at ?? null,
-          latestMilestoneOutcome: milestones.data?.outcome ?? 'No evaluations yet',
-          latestMilestoneAt: milestones.data?.created_at ?? null,
-          latestMilestoneTarget: formatStageLabel(milestones.data?.proposed_stage_key),
-        });
-        setErrorMessage(instance.error?.message ?? approvals.error?.message ?? welfare.error?.message ?? milestones.error?.message ?? null);
-        setIsLoading(false);
-      }
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setIsLoading(false);
+      return;
     }
 
-    loadData();
-    return () => {
-      active = false;
-    };
+    const membership = await supabase
+      .from('parent_memberships')
+      .select('instance_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (membership.error || !membership.data?.instance_id) {
+      setErrorMessage(membership.error?.message ?? null);
+      setIsLoading(false);
+      return;
+    }
+
+    const instanceId = membership.data.instance_id;
+    const [instance, approvals, welfare, milestones] = await Promise.all([
+      supabase
+        .from('neura_instances')
+        .select('display_name,current_stage_key')
+        .eq('id', instanceId)
+        .single(),
+      supabase
+        .from('parent_approvals')
+        .select('id', { count: 'exact', head: true })
+        .eq('instance_id', instanceId)
+        .eq('status', 'pending'),
+      supabase
+        .from('welfare_logs')
+        .select('status,created_at')
+        .eq('instance_id', instanceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from('milestone_evaluations')
+        .select('outcome,proposed_stage_key,created_at')
+        .eq('instance_id', instanceId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    setSummary({
+      instanceId,
+      instanceName: instance.data?.display_name ?? 'NeuraGenesis',
+      currentStageLabel: formatStageLabel(instance.data?.current_stage_key),
+      welfareStatus: welfare.data?.status ?? 'No logs yet',
+      pendingApprovals: approvals.count ?? 0,
+      latestWelfareAt: welfare.data?.created_at ?? null,
+      latestMilestoneOutcome: milestones.data?.outcome ?? 'No evaluations yet',
+      latestMilestoneAt: milestones.data?.created_at ?? null,
+      latestMilestoneTarget: formatStageLabel(milestones.data?.proposed_stage_key),
+    });
+
+    setErrorMessage(
+      instance.error?.message ??
+      approvals.error?.message ??
+      welfare.error?.message ??
+      milestones.error?.message ??
+      null,
+    );
+    setIsLoading(false);
   }, [user]);
 
-  return { summary, isLoading, errorMessage };
+  useEffect(() => {
+    setIsLoading(true);
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!summary.instanceId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`parent-console-${summary.instanceId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'parent_approvals', filter: `instance_id=eq.${summary.instanceId}` },
+        () => void refresh(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'welfare_logs', filter: `instance_id=eq.${summary.instanceId}` },
+        () => void refresh(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'milestone_evaluations', filter: `instance_id=eq.${summary.instanceId}` },
+        () => void refresh(),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [refresh, summary.instanceId]);
+
+  return { summary, isLoading, errorMessage, refresh };
 }
