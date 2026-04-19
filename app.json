@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "NeuraGenesis",
+    "slug": "neuragenesis",
+    "scheme": "neuragenesis",
+    "plugins": [
+      "expo-router"
+    ],
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
