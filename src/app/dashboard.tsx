@@ -14,7 +14,7 @@ function Card(props: { title: string; value: string; detail: string }) {
   );
 }
 
-function NavButton(props: { href: '/approvals' | '/learning'; label: string }) {
+function NavButton(props: { href: '/approvals' | '/learning' | '/milestones'; label: string }) {
   return (
     <Link asChild href={props.href}>
       <Pressable style={{ backgroundColor: '#e2e8f0', borderRadius: 12, marginBottom: 12, paddingHorizontal: 16, paddingVertical: 12 }}>
@@ -22,6 +22,10 @@ function NavButton(props: { href: '/approvals' | '/learning'; label: string }) {
       </Pressable>
     </Link>
   );
+}
+
+function formatDate(value: string | null) {
+  return value ? new Date(value).toLocaleString() : 'No records yet';
 }
 
 export default function DashboardRoute() {
@@ -40,10 +44,12 @@ export default function DashboardRoute() {
         </Text>
 
         <Card title="Current stage" value={summary.currentStageLabel} detail="Stage value is loaded from the current instance record." />
-        <Card title="Welfare state" value={summary.welfareStatus} detail="Latest status is loaded from the most recent log entry." />
         <Card title="Pending approvals" value={String(summary.pendingApprovals)} detail="Pending request count is loaded from approval records." />
+        <Card title="Latest welfare log" value={summary.welfareStatus} detail={formatDate(summary.latestWelfareAt)} />
+        <Card title="Latest milestone evaluation" value={summary.latestMilestoneOutcome} detail={`${summary.latestMilestoneTarget} · ${formatDate(summary.latestMilestoneAt)}`} />
 
         <NavButton href="/approvals" label="Open approvals" />
+        <NavButton href="/milestones" label="Open milestone evaluations" />
         <NavButton href="/learning" label="Open learning activity" />
 
         <Pressable onPress={() => signOut()} style={{ backgroundColor: '#111827', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 }}>
