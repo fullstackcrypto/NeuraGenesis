@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { supabase } from '../lib/supabase/supabaseClient.js';
 import { useAuth } from '../providers/AuthProvider.js';
@@ -9,6 +9,7 @@ interface MilestoneItem {
   proposed_stage_key: string;
   readiness_score: number;
   outcome: string;
+  approval_id: string | null;
   created_at: string;
 }
 
@@ -29,49 +30,69 @@ function formatDate(value: string) {
 
 export default function MilestonesRoute() {
   const { user } = useAuth();
+  const [instanceId, setInstanceId] = useState<string | null>(null);
   const [items, setItems] = useState<MilestoneItem[]>([]);
   const [statusText, setStatusText] = useState('Loading milestone evaluations...');
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadItems() {
-      if (!user) {
-        if (active) setStatusText('Sign in to view milestone evaluations.');
-        return;
-      }
-
-      const membership = await supabase.from('parent_memberships').select('instance_id').eq('user_id', user.id).limit(1).maybeSingle();
-      const instanceId = membership.data?.instance_id;
-
-      if (!instanceId) {
-        if (active) setStatusText('No NeuraGenesis instance found.');
-        return;
-      }
-
-      const result = await supabase
-        .from('milestone_evaluations')
-        .select('id, from_stage_key, proposed_stage_key, readiness_score, outcome, created_at')
-        .eq('instance_id', instanceId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (!active) return;
-
-      if (result.error) {
-        setStatusText(result.error.message);
-        return;
-      }
-
-      setItems(result.data ?? []);
-      setStatusText((result.data ?? []).length === 0 ? 'No milestone evaluations found yet.' : '');
+  const loadItems = useCallback(async () => {
+    if (!user) {
+      setStatusText('Sign in to view milestone evaluations.');
+      return;
     }
 
-    loadItems();
-    return () => {
-      active = false;
-    };
+    const membership = await supabase
+      .from('parent_memberships')
+      .select('instance_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
+
+    const nextInstanceId = membership.data?.instance_id ?? null;
+    setInstanceId(nextInstanceId);
+
+    if (!nextInstanceId) {
+      setStatusText('No NeuraGenesis instance found.');
+      return;
+    }
+
+    const result = await supabase
+      .from('milestone_evaluations')
+      .select('id, from_stage_key, proposed_stage_key, readiness_score, outcome, approval_id, created_at')
+      .eq('instance_id', nextInstanceId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (result.error) {
+      setStatusText(result.error.message);
+      return;
+    }
+
+    setItems(result.data ?? []);
+    setStatusText((result.data ?? []).length === 0 ? 'No milestone evaluations found yet.' : '');
   }, [user]);
+
+  useEffect(() => {
+    void loadItems();
+  }, [loadItems]);
+
+  useEffect(() => {
+    if (!instanceId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`milestones-${instanceId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'milestone_evaluations', filter: `instance_id=eq.${instanceId}` },
+        () => void loadItems(),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [instanceId, loadItems]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
@@ -90,6 +111,7 @@ export default function MilestonesRoute() {
               Path: {stageLabel(item.from_stage_key)} → {stageLabel(item.proposed_stage_key)}
             </Text>
             <Text style={{ color: '#334155', fontSize: 14, marginBottom: 4 }}>Readiness score: {String(item.readiness_score)}</Text>
+            <Text style={{ color: '#475569', fontSize: 13, marginBottom: 4 }}>Approval link: {item.approval_id ?? 'None'}</Text>
             <Text style={{ color: '#64748b', fontSize: 13 }}>Evaluated: {formatDate(item.created_at)}</Text>
           </View>
         ))}
