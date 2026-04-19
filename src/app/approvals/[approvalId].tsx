@@ -9,7 +9,6 @@ interface ApprovalRecord {
   target_ref: string;
   status: string;
   rationale: string | null;
-  requested_payload: Record<string, unknown> | null;
   created_at: string;
   decided_at: string | null;
 }
@@ -25,6 +24,7 @@ interface MilestoneRecord {
 
 interface AuditRecord {
   id: string;
+  actor_display: string;
   event_type: string;
   details: Record<string, unknown> | null;
   created_at: string;
@@ -50,37 +50,17 @@ export default function ApprovalDetailRoute() {
         return;
       }
 
-      const [approvalResult, auditResult, milestoneResult] = await Promise.all([
-        supabase
-          .from('parent_approvals')
-          .select('id, approval_type, target_ref, status, rationale, requested_payload, created_at, decided_at')
-          .eq('id', approvalId)
-          .single(),
-        supabase
-          .from('audit_events')
-          .select('id, event_type, details, created_at')
-          .eq('target_table', 'parent_approvals')
-          .eq('target_id', approvalId)
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('milestone_evaluations')
-          .select('id, from_stage_key, proposed_stage_key, readiness_score, outcome, created_at')
-          .eq('approval_id', approvalId)
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
+      const result = await supabase.functions.invoke('approval-detail', { body: { approvalId } });
       if (!active) return;
 
-      if (approvalResult.error) {
-        setStatusText(approvalResult.error.message);
+      if (result.error) {
+        setStatusText(result.error.message);
         return;
       }
 
-      setApproval(approvalResult.data);
-      setMilestone(milestoneResult.data ?? null);
-      setAuditItems(auditResult.data ?? []);
+      setApproval(result.data?.approval ?? null);
+      setMilestone(result.data?.milestone ?? null);
+      setAuditItems(result.data?.auditItems ?? []);
       setStatusText('');
     }
 
@@ -94,9 +74,7 @@ export default function ApprovalDetailRoute() {
     <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
         <Text style={{ color: '#0f172a', fontSize: 28, fontWeight: '700', marginBottom: 6 }}>Approval Detail</Text>
-        <Text style={{ color: '#475569', fontSize: 15, marginBottom: 18 }}>
-          Detailed approval status, rationale history, and linked milestone evaluation.
-        </Text>
+        <Text style={{ color: '#475569', fontSize: 15, marginBottom: 18 }}>Detailed status, history, and linked records.</Text>
 
         {statusText ? <Text style={{ color: '#334155', marginBottom: 16 }}>{statusText}</Text> : null}
 
@@ -127,11 +105,12 @@ export default function ApprovalDetailRoute() {
         </View>
 
         <View style={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: 16, borderWidth: 1, marginBottom: 14, padding: 16 }}>
-          <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Rationale history</Text>
+          <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>History</Text>
           {auditItems.length === 0 ? <Text style={{ color: '#475569' }}>No audit history found.</Text> : null}
           {auditItems.map((item) => (
             <View key={item.id} style={{ borderTopColor: '#e2e8f0', borderTopWidth: 1, paddingTop: 10, marginTop: 10 }}>
               <Text style={{ color: '#0f172a', fontSize: 15, fontWeight: '600', marginBottom: 4 }}>{item.event_type}</Text>
+              <Text style={{ color: '#475569', marginBottom: 4 }}>Actor: {item.actor_display}</Text>
               <Text style={{ color: '#475569', marginBottom: 4 }}>{formatDate(item.created_at)}</Text>
               <Text style={{ color: '#334155' }}>{JSON.stringify(item.details ?? {}, null, 2)}</Text>
             </View>
