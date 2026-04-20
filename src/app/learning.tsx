@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, ScrollView, Text, View } from 'react-native';
-import { supabase } from '../lib/supabase/supabaseClient.js';
-import { useAuth } from '../providers/AuthProvider.js';
+import { supabase } from '../lib/supabase/supabaseClient';
+import { useAuth } from '../providers/AuthProvider';
 
 interface LearningItem {
   id: string;
