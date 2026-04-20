@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
-import { supabase } from '../../lib/supabase/supabaseClient.js';
+import { supabase } from '../../lib/supabase/supabaseClient';
 
 interface ApprovalRecord {
   id: string;
