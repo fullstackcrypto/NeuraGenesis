@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'expo-router';
 import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
-import { supabase } from '../lib/supabase/supabaseClient.js';
-import { useAuth } from '../providers/AuthProvider.js';
+import { supabase } from '../lib/supabase/supabaseClient';
+import { useAuth } from '../providers/AuthProvider';
 
 interface ApprovalItem {
   id: string;
