@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase/supabaseClient.js';
-import { useAuth } from '../providers/AuthProvider.js';
+import { supabase } from '../lib/supabase/supabaseClient';
+import { useAuth } from '../providers/AuthProvider';
 
 const STAGE_OPTIONS = ['newborn', 'curious', 'apprentice', 'savant_candidate'] as const;
 
