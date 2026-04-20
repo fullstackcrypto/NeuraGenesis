@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase/supabaseClient.js';
-import { useAuth } from '../providers/AuthProvider.js';
+import { supabase } from '../lib/supabase/supabaseClient';
+import { useAuth } from '../providers/AuthProvider';
 
 const STAGE_LABELS: Record<string, string> = {
   newborn: 'Newborn',
